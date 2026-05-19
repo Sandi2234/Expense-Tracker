@@ -16,6 +16,7 @@ class CategorySeeder extends Seeder
             ['name' => 'Kopi & Hiburan', 'color' => '#F59E0B'],   // Kuning
             ['name' => 'Gaji & Bonus', 'color' => '#10B981'],     // Hijau
             ['name' => 'Belanja', 'color' => '#8B5CF6'],          // Ungu
+            ['name' => 'Lainnya', 'color' => '#ffffff'],          // Putih
         ];
 
         foreach ($categories as $cat) {

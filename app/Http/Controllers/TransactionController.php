@@ -19,23 +19,27 @@ class TransactionController extends Controller
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
-        // Query dasar transaksi milik user yang sedang login
-        $query = Transaction::with('category')
-            ->where('user_id', $userId)
-            ->whereMonth('date', $month)
-            ->whereYear('date', $year);
+        // Optimasi Performa: Menggunakan Rentang Tanggal (Mendukung Database Indexing)
+        $startDate = "{$year}-{$month}-01";
+        $endDate = date('Y-m-t', strtotime($startDate));
 
-        // Ambil data untuk kalkulasi dashboard
-        $transactions = $query->orderBy('date', 'desc')->get();
+        // Query dasar transaksi milik user yang sedang login
+        $transactions = Transaction::with('category')
+            ->where('user_id', $userId)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date', 'desc')
+            ->get();
         
+        // Kalkulasi dashboard langsung dari koleksi data di memori (Efisien)
         $totalIncome = $transactions->where('type', 'income')->sum('amount');
         $totalExpense = $transactions->where('type', 'expense')->sum('amount');
         $totalBalance = $totalIncome - $totalExpense;
 
-        // Ambil kategori untuk pilihan di form (Kategori sistem + Kategori buatan user)
-        $categories = Category::whereNull('user_id')
-            ->orWhere('user_id', $userId)
-            ->get();
+        // FIX SECURITY: Mencegah kebocoran data kategori antar user dengan Query Grouping
+        $categories = Category::where(function ($query) use ($userId) {
+            $query->whereNull('user_id')
+                  ->orWhere('user_id', $userId);
+        })->get();
 
         return view('dashboard', compact(
             'transactions', 
@@ -51,14 +55,11 @@ class TransactionController extends Controller
     // 2. SIMPAN TRANSAKSI BARU (CREATE)
     public function store(StoreTransactionRequest $request)
     {
-        Transaction::create([
-            'user_id' => Auth::id(),
-            'category_id' => $request->category_id,
-            'type' => $request->type,
-            'amount' => $request->amount,
-            'date' => $request->date,
-            'description' => $request->description,
-        ]);
+        // Memastikan hanya data tervalidasi yang masuk + inject user_id secara aman
+        $validated = $request->validated();
+        $validated['user_id'] = Auth::id();
+
+        Transaction::create($validated);
 
         return redirect()->back()->with('success', 'Transaksi berhasil dicatat!');
     }
